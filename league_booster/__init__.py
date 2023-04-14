@@ -4,7 +4,8 @@ import winsound
 from time import sleep
 
 import numpy as np
-import pyttsx3
+import pythoncom
+import win32com.client as wincom
 import speech_recognition as sr
 from load import *
 from loguru import logger
@@ -77,17 +78,33 @@ def command_listener(database: dict, model, vectorizer) -> None:
         #Todo: Som de erro
 
 
-def spell_notification(spell: str, role: str, database: dict) -> None:  # Todo: Docstring
-    tts = pyttsx3.init()
+def spell_notification(spell: str, role: str, database: dict) -> None:
+    """
+    Notificação de spell disponível
+    
+    Parâmetros:
+    -----------
+    spell: str
+        Nome do spell
+    role: str
+        Nome do role
+    database: dict
+        Banco de dados
+    
+    Retorna:
+    -------
+    None
+    """
 
+    pythoncom.CoInitialize()
+    tts = wincom.Dispatch("SAPI.SpVoice")
+    
     timer = database['spells'][spell]
     sleep(timer - database['delay'])
     # Todo: suporte para inglês
     notification = f'{spell} do {role} estará disponível em breve.'
     logger.info(notification)
-    tts.say(notification)
-    tts.runAndWait()
-    tts.stop()
+    tts.Speak(notification)
 
     del tts
 
@@ -98,7 +115,6 @@ if __name__ == '__main__':
     database = load_data()
     model, vectorizer = load_model()
     logger.success('Modelo carregado com sucesso!')
-
     while True:
         if idle_trigger():
             command_listener(database, model, vectorizer)

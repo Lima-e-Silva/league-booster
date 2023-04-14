@@ -1,7 +1,6 @@
 loguru==0.6.0
 numpy==1.21.4
 pandas==1.4.1
-pyttsx3==2.90
 PyYAML==6.0
 scikit_learn==1.2.2
 SpeechRecognition==3.9.0
