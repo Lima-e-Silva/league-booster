@@ -166,7 +166,7 @@ champions:
   - zyra
 
 spells:
-  flash: 10 #300
+  flash: 300
   curar: 240
   fantasma: 210
   teleporte: 360
