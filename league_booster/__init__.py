@@ -37,6 +37,7 @@ def command_listener(database: dict, model, vectorizer) -> None:
         audio = r.listen(source)
     try:
         audio_to_text = r.recognize_google(audio, language="pt-BR")
+        audio_to_text = audio_to_text.lower()
         command = vectorizer.transform(
             [audio_to_text]).toarray().astype(np.int8)
         command = model.predict(command)[0]
@@ -48,7 +49,7 @@ def command_listener(database: dict, model, vectorizer) -> None:
         #   - ROLE
 
         if 'counters' in command:
-            #Todo: Som de sucesso
+            winsound.PlaySound('assets\\sounds\\success.wav', winsound.SND_NOSTOP)
             command = command.split(' ')
             logger.info('Buscando counters para {} {}'.format(
                 command[1], command[2]))  # Todo: suporte para inglês
@@ -60,7 +61,7 @@ def command_listener(database: dict, model, vectorizer) -> None:
         #   - SPELL
         #   - ROLE
         if 'spell' in command:
-            #Todo: Som de sucesso
+            winsound.PlaySound('assets\\sounds\\success.wav', winsound.SND_NOSTOP)
             command = command.split(' ')
             threading.Thread(target=spell_notification, args=(
                 command[1], command[2], database, )).start()
