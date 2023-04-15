@@ -8,16 +8,30 @@ import pythoncom
 import win32com.client as wincom
 import speech_recognition as sr
 from load import *
-from loguru import logger
+from log import *
 
 
-def idle_trigger():
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        audio = r.listen(source)
+
+def idle_trigger(r: sr.Recognizer) -> bool | None:
+    """
+    Verifica se o comando de inicialização do assistente virtual foi executado.
+    
+    Parâmetros:
+    -----------
+    r: sr.Recognizer
+        Objeto de reconhecimento de fala
+    
+    Retorna:
+    -------
+    True: se o comando de inicialização foi fornecido
+    None: se o comando de inicialização não foi fornecido
+    """
+
     try:
+        with sr.Microphone() as source:
+            audio = r.listen(source, timeout=8)
         command = r.recognize_google(audio, language="pt-BR")
-        if 'assistente' in command.lower():  # Todo: suporte para inglês | Talvez utilizar um comando melhor p/ despertar
+        if 'assistente' in command.lower():  # Todo: suporte para inglês
             return True
     except sr.UnknownValueError:
         # Todo: suporte para inglês
@@ -27,17 +41,40 @@ def idle_trigger():
         logger.error("Não foi possível acessar o serviço de reconhecimento de fala: {}".format(
             e))  # Todo: suporte para inglês
         #Todo: Som de erro
+    except sr.WaitTimeoutError:
+        return
 
 
-def command_listener(database: dict, model, vectorizer) -> None:
-    winsound.PlaySound('assets\\sounds\\listening.wav', winsound.SND_NOSTOP)
-    logger.info('Aguardando comando...')
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        audio = r.listen(source)
+def command_listener(r: sr.Recognizer, database: dict, model, vectorizer) -> None:
+    """
+    Interpreta os comandos fornecidos, através do modelo de IA e executa tais comandos.
+    
+    Parâmetros:
+    -----------
+    r: sr.Recognizer
+        Objeto de reconhecimento de fala
+    database: dict
+        Banco de dados do algoritmo
+    model:
+        Modelo de IA
+    vectorizer:
+        Vetorizador de palavras
+    
+    Retorna:
+    -------
+    None
+    """
+
     try:
+        with sr.Microphone() as source:
+            logger.info('Aguardando comando...')
+            winsound.PlaySound(
+                'assets\\sounds\\listening.wav', winsound.SND_NOSTOP)
+            audio = r.listen(source, timeout=8)
+
         audio_to_text = r.recognize_google(audio, language="pt-BR")
         audio_to_text = audio_to_text.lower()
+        logger.info(f'Commando: {audio_to_text}')
         command = vectorizer.transform(
             [audio_to_text]).toarray().astype(np.int8)
         command = model.predict(command)[0]
@@ -49,7 +86,8 @@ def command_listener(database: dict, model, vectorizer) -> None:
         #   - ROLE
 
         if 'counters' in command:
-            winsound.PlaySound('assets\\sounds\\success.wav', winsound.SND_NOSTOP)
+            winsound.PlaySound('assets\\sounds\\success.wav',
+                               winsound.SND_NOSTOP)
             command = command.split(' ')
             logger.info('Buscando counters para {} {}'.format(
                 command[1], command[2]))  # Todo: suporte para inglês
@@ -61,7 +99,8 @@ def command_listener(database: dict, model, vectorizer) -> None:
         #   - SPELL
         #   - ROLE
         if 'spell' in command:
-            winsound.PlaySound('assets\\sounds\\success.wav', winsound.SND_NOSTOP)
+            winsound.PlaySound('assets\\sounds\\success.wav',
+                               winsound.SND_NOSTOP)
             command = command.split(' ')
             threading.Thread(target=spell_notification, args=(
                 command[1], command[2], database, )).start()
@@ -77,11 +116,14 @@ def command_listener(database: dict, model, vectorizer) -> None:
         logger.error("Não foi possível acessar o serviço de reconhecimento de fala: {}".format(
             e))  # Todo: suporte para inglês
         #Todo: Som de erro
+    except sr.WaitTimeoutError:
+        logger.error('Nenhum comando fornecido durante tempo de espera')
+        #Todo: Som de erro
 
 
 def spell_notification(spell: str, role: str, database: dict) -> None:
     """
-    Notificação de spell disponível
+    Notifica o fim do tempo de recarga de uma spell.
     
     Parâmetros:
     -----------
@@ -99,7 +141,7 @@ def spell_notification(spell: str, role: str, database: dict) -> None:
 
     pythoncom.CoInitialize()
     tts = wincom.Dispatch("SAPI.SpVoice")
-    
+
     timer = database['spells'][spell]
     sleep(timer - database['delay'])
     # Todo: suporte para inglês
@@ -111,11 +153,19 @@ def spell_notification(spell: str, role: str, database: dict) -> None:
 
 
 if __name__ == '__main__':
-    # Todo: Pasta p/ logs
-    # Carregar o banco de dados e modelo
+    # Criando arquivo de log
+    create_logfile()
+
+    # Carregando o banco de dados e modelo
     database = load_data()
     model, vectorizer = load_model()
     logger.success('Modelo carregado com sucesso!')
+
+    # Preparando o serviço de reconhecimento de fala
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        r.adjust_for_ambient_noise(source)
+
     while True:
-        if idle_trigger():
-            command_listener(database, model, vectorizer)
+        if idle_trigger(r):
+            command_listener(r, database, model, vectorizer)
