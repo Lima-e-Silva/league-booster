@@ -23,7 +23,7 @@ def user_input_test() -> None:
             command = r.recognize_google(audio, language="pt-BR").lower()
             if 'encerrar' in command:
                 break
-            command = vectorizer.transform([command]).toarray().astype(np.int8)
+            command = vectorizer.transform([command.lower()]).toarray().astype(np.int8)
             logger.info(f'Comando interpretado: {model.predict(command)}')
         except:
             logger.error('Ocorreu um erro. Tente novamente.')

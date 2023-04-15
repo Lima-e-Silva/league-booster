@@ -11,62 +11,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 
-
-def generate_variants(inputs: list, outputs: list, database: dict, command: str = 'counters') -> tuple:
-    """
-    Retorna as variantes possíveis para os inputs.
-
-    Parâmetros
-    ----------
-    inputs: list
-        Lista com inputs de nomes dos campeões
-    outputs: list
-        Lista com outputs de nomes dos campeões
-    database: dict
-        Dicionário com as informações do banco de dados
-
-    Retorna
-    -------
-    (list, list)
-    """
-
-    # Inserindo variantes possíveis
-    x = []
-    y = []
-    if command == 'counters':
-        for n, user_input in enumerate(inputs):
-            for role in database['roles']:
-                new_input = f'counters {user_input} {role}'
-                output = f'counters {outputs[n]} {role}'
-
-                x.append(new_input)  # Entrada do usuário
-                y.append(output)  # Saída do algoritmo
-                x.append(output)  # Entrada ideal
-                y.append(output)  # Saída do algoritmo
-
-                for mistake in list(database['mistakes'].keys()):
-                    if mistake in new_input:
-                        for variant in database['mistakes'][mistake]:
-                            x.append(new_input.replace(mistake, variant))
-                            y.append(output)
-    elif command == 'spells':
-        for n, user_input in enumerate(inputs):
-            for role in database['roles']:
-                new_input = f'{user_input} {role}'
-                output = f'spell {outputs[n]} {role}'
-
-                x.append(new_input)  # Entrada do usuário
-                y.append(output)  # Saída do algoritmo
-                x.append(' '.join(output.split(' ')[1:]))  # Entrada ideal
-                y.append(output)  # Saída do algoritmo
-
-                for mistake in list(database['mistakes'].keys()):
-                    if mistake in new_input:
-                        for variant in database['mistakes'][mistake]:
-                            x.append(new_input.replace(mistake, variant))
-                            y.append(output)
-
-    return (x, y)
+# ─── Modelo ───────────────────────────────────────────────────────────────────
 
 
 def train_model(max_features: int = 1000, test_size: float = 0.2, export: bool = False) -> tuple:
@@ -120,6 +65,93 @@ def train_model(max_features: int = 1000, test_size: float = 0.2, export: bool =
         logger.success('Modelo salvo com sucesso.')
 
     return (classification_model, vectorizer)
+
+
+# ─── Manipulação Do Banco De Dados Do Modelo ──────────────────────────────────
+
+
+def variate_input(user_input: str, database: dict) -> tuple:
+    """
+    Retorna as variantes possíveis para o input do usuário
+    """
+    variants = [user_input]
+    for mistake in list(database['mistakes'].keys()):
+        if mistake in user_input.split(' '):
+            for variant in database['mistakes'][mistake]:
+                variants.extend(variate_input(
+                    user_input.replace(mistake, variant), database))
+
+    return variants
+
+
+def generate_variants(inputs: list, outputs: list, database: dict, command: str = 'counters') -> tuple:
+    """
+    Retorna as variantes possíveis para os inputs.
+
+    Parâmetros
+    ----------
+    inputs: list
+        Lista com inputs de nomes dos campeões
+    outputs: list
+        Lista com outputs de nomes dos campeões
+    database: dict
+        Dicionário com as informações do banco de dados
+
+    Retorna
+    -------
+    (list, list)
+    """
+
+    # Inserindo variantes possíveis
+    x = []
+    y = []
+    if command == 'counters':
+        for n, user_input in enumerate(inputs):
+            for role in database['roles']:
+                new_input = f'counters {user_input} {role}'
+                output = f'counters {outputs[n]} {role}'
+
+                var_x = variate_input(new_input, database)
+                output = [output] * len(var_x)
+                x.extend(var_x)
+                y.extend(output)
+
+    elif command == 'spells':
+        for n, user_input in enumerate(inputs):
+            for role in database['roles']:
+                new_input = f'{user_input} {role}'
+                output = f'spell {outputs[n]} {role}'
+
+                x.append(new_input)  # Entrada do usuário
+                y.append(output)  # Saída do algoritmo
+                x.append(' '.join(output.split(' ')[1:]))  # Entrada ideal
+                y.append(output)  # Saída do algoritmo
+
+                for mistake in list(database['mistakes'].keys()):
+                    if mistake in new_input:
+                        for variant in database['mistakes'][mistake]:
+                            x.append(new_input.replace(mistake, variant))
+                            y.append(output)
+
+    return (x, y)
+
+
+def populate_model_data() -> None:
+    # Carregando banco de dados
+    database = load_data()
+
+    # Carregando banco de dados do modelo
+    model_data = pd.read_feather(r'assets\model\model_data.feather')
+
+    # Inserindo dados no banco de dados
+    df = model_data[['input_name', 'output_name']].copy()
+    df = df.query('input_name != ""')
+    df.drop_duplicates(inplace=True, ignore_index=True)
+    inputs, outputs = df['input_name'], df['output_name']
+    x, y = generate_variants(inputs, outputs, database, 'counters')
+
+    # Exportando dados
+    export_txt(x, y)
 
 
 def store_data() -> None:
@@ -268,7 +300,7 @@ def collect_data_spells(repeat: int = 5) -> None:
                     'assets\\sounds\\listening.wav', winsound.SND_NOSTOP)
                 logger.info(
                     f'[Repetição {repetition+1}/{repeat}]: Diga "{spell}" + top|mid|jungle|adc|support')
-                audio = r.listen(source, timeout=6)
+                audio = r.listen(source)
                 try:
                     user_input = r.recognize_google(
                         audio, language="pt-BR").lower().split(' ')
@@ -395,8 +427,8 @@ def insert_data_counters() -> None:
 
 
 if __name__ == '__main__':
-    #collect_data_counters(start=95, stop=5, repeat=3)
-    #store_data()
-    #collect_data_spells(repeat=4)
-    #data_analysis(ignore=['jhin'], threshold=0.2)
+    collect_data_counters(start=135, stop=5, repeat=3)
+    store_data()
+    data_analysis(ignore=['jhin', 'sett', 'tryndamere', 'flash', 'curar',
+                  'fantasma', 'teleporte', 'incendiar', 'purificar', 'barreira'])
     train_model(export=True)
