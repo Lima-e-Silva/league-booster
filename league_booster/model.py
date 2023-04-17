@@ -38,7 +38,7 @@ def train_model(max_features: int = 1000, test_size: float = 0.2, export: bool =
     y = model_data['output'].to_numpy()
 
     # Vetorização
-    vectorizer = CountVectorizer(max_features=max_features)
+    vectorizer = CountVectorizer(max_features=max_features, stop_words=[''])
     x = vectorizer.fit_transform(x).toarray().astype(np.int8)
 
     # Divisão treino | teste
@@ -132,6 +132,17 @@ def generate_variants(inputs: list, outputs: list, database: dict, command: str 
                         for variant in database['mistakes'][mistake]:
                             x.append(new_input.replace(mistake, variant))
                             y.append(output)
+    
+    elif command == 'draft':
+        for n, user_input in enumerate(inputs):
+            for role in database['roles']:
+                new_input = f'draft {user_input} {role}'
+                output = f'draft {outputs[n]} {role}'
+
+                var_x = variate_input(new_input, database)
+                output = [output] * len(var_x)
+                x.extend(var_x)
+                y.extend(output)
 
     return (x, y)
 
@@ -145,13 +156,22 @@ def populate_model_data() -> None:
 
     # Inserindo dados no banco de dados
     df = model_data[['input_name', 'output_name']].copy()
-    df = df.query('input_name != ""')
+    df = df.query('input_name != "" | output_name not in @database[\'spells\'].keys()')
     df.drop_duplicates(inplace=True, ignore_index=True)
     inputs, outputs = df['input_name'], df['output_name']
-    x, y = generate_variants(inputs, outputs, database, 'counters')
+
+    x = []
+    y = []
+    for command in ['counters', 'draft']:
+        temp_x, temp_y = generate_variants(
+            inputs, outputs, database, command
+        )
+        x.extend(temp_x)
+        y.extend(temp_y)
 
     # Exportando dados
     export_txt(x, y)
+    logger.success('Dados coletados e salvos com sucesso!')
 
 
 def store_data() -> None:
@@ -277,7 +297,6 @@ def export_txt(x: list, y: list) -> None:
 
 
 # ─── Comando "Spell" ──────────────────────────────────────────────────────────
-
 
 def collect_data_spells(repeat: int = 5) -> None:
     """
@@ -426,9 +445,70 @@ def insert_data_counters() -> None:
     logger.success('Dados coletados e salvos com sucesso!')
 
 
+# ─── Comando "Draft" ──────────────────────────────────────────────────────────
+
+
+def collect_data_draft(start: int | str, stop: int = 5, repeat: int = 5) -> None:
+    """
+    Função utilizada para coletar dados para o modelo (função Duo).
+    """
+
+    # Carregar banco de dados
+    database = load_data()
+    champions = database['champions']
+
+    # Converter nome do campeão para id
+    if type(start) == str:
+        start = champions.index(start)
+
+    # Obtendo nomes dos campeões
+    inputs = []
+    outputs = []
+    iteration = 0
+    r = sr.Recognizer()
+    while iteration < stop:
+        repetition = 0
+        with sr.Microphone() as source:
+            while repetition < repeat:
+                winsound.PlaySound(
+                    'assets\\sounds\\listening.wav', winsound.SND_NOSTOP)
+                logger.info(
+                    f'[Repetição {repetition+1}/{repeat}]: Diga "draft {champions[iteration+start]} top"')
+                audio = r.listen(source, timeout=6)
+                try:
+                    user_input = r.recognize_google(
+                        audio, language="pt-BR").lower().split(' ')
+                    command = user_input[0]
+                    champion = ' '.join(user_input[1:-1])
+                    role = user_input[-1]
+                    if user := input(f'[Comando]: {command}\n[Campeão]: {champion}\n[Role]: {role}\n\nPara confirmar pressione "Enter". Para cancelar, digite algo.\n[Usuário]: ') != '':
+                            continue
+                    repetition += 1
+                    if champion not in inputs:
+                        inputs.append(champion)
+                        outputs.append(champions[iteration+start])
+
+                except:
+                    logger.error('Nenhum comando reconhecido')
+            iteration += 1
+        
+    # Inserindo variantes possíveis
+    x, y = generate_variants(inputs, outputs, database, 'draft')
+
+    # Salvando resultados em arquivo txt para posterior visualização
+    export_txt(x, y)
+
+    logger.success('Dados coletados e salvos com sucesso!')
+                
+
 if __name__ == '__main__':
-    collect_data_counters(start=135, stop=5, repeat=3)
+    '''collect_data_counters(start=135, stop=5, repeat=3)
     store_data()
     data_analysis(ignore=['jhin', 'sett', 'tryndamere', 'flash', 'curar',
                   'fantasma', 'teleporte', 'incendiar', 'purificar', 'barreira'])
+    train_model(export=True)'''
+    insert_data_counters()
+    store_data()
+    populate_model_data()
+    store_data()
     train_model(export=True)

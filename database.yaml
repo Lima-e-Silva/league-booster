@@ -184,6 +184,10 @@ roles:
 # ─── Dados Do Modelo ──────────────────────────────────────────────────────────
 
 mistakes:
+  draft:
+    - draf
+    - craft
+    - direct
   counters:
     - country
     - counter
