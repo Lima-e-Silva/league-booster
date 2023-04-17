@@ -1,18 +1,19 @@
 import threading
-import webbrowser
 import winsound
+from functools import partial
 from time import sleep
 
+import keyboard
 import numpy as np
 import pythoncom
-import win32com.client as wincom
 import speech_recognition as sr
+import win32com.client as wincom
+from draft_commands import *
 from load import *
 from log import *
 
 
-
-def idle_trigger(r: sr.Recognizer) -> bool | None:
+def idle_trigger(r: sr.Recognizer) -> bool | None:  # Todo: Remover
     """
     Verifica se o comando de inicialização do assistente virtual foi executado.
     
@@ -43,6 +44,12 @@ def idle_trigger(r: sr.Recognizer) -> bool | None:
         #Todo: Som de erro
     except sr.WaitTimeoutError:
         return
+
+
+def button_trigger(event, r: sr.Recognizer | None = None) -> None:
+    if event.name == '=':
+        command_listener(r, database, model, vectorizer)
+        event.name = ''
 
 
 def command_listener(r: sr.Recognizer, database: dict, model, vectorizer) -> None:
@@ -91,8 +98,20 @@ def command_listener(r: sr.Recognizer, database: dict, model, vectorizer) -> Non
             command = command.split(' ')
             logger.info('Buscando counters para {} {}'.format(
                 command[1], command[2]))  # Todo: suporte para inglês
-            webbrowser.open(
-                f"https://www.op.gg/champions/{command[1]}/{command[2]}/counters?region=global&tier=platinum_plus", new=0, autoraise=True)
+            counters(' '.join(command[1:3]), display=True)
+
+        # ─── Funcionalidade: Draft ────────────────────────
+        # Instruções: o comando deve conter os seguintes parâmetros:
+        #   - "draft"
+        #   - NOME DO CAMPEÃO
+        #   - ROLE
+        if 'draft' in command:
+            winsound.PlaySound('assets\\sounds\\success.wav',
+                               winsound.SND_NOSTOP)
+            command = command.split(' ')
+            logger.info('Buscando draft para {} {}'.format(
+                command[1], command[2]))  # Todo: suporte para inglês
+            draft(' '.join(command[1:3]))
 
         # ─── Funcionalidade: Cooldown De Spell ────────────────────────
         # Instruções: o comando deve conter os seguintes parâmetros:
@@ -167,5 +186,5 @@ if __name__ == '__main__':
         r.adjust_for_ambient_noise(source)
 
     while True:
-        if idle_trigger(r):
-            command_listener(r, database, model, vectorizer)
+        keyboard.on_press(partial(button_trigger, r=r))
+        sleep(10)
